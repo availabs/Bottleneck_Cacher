@@ -4,8 +4,8 @@ import psycopg2, time, urllib2, json, datetime, calendar, threading, sys
 
 from connection_data import hermesConnectionData
         
-API_HOST = "http://localhost:12222/"
-API_HOST = "dev.npmrds.availabs.org/api/"
+#API_HOST = "http://localhost:12222/"
+API_HOST = "http://dev.npmrds.availabs.org/api/"
 
 class Nestor:
     def __init__(self):
@@ -133,7 +133,7 @@ class TmcThreader(threading.Thread):
         "&endDate={}" +\
         "&startTime={}" +\
         "&endTime={}"
-    GRAPH_URL = 'http://localhost:12222/networkgraph/parent/from/tmc/{}/depth/5'
+    GRAPH_URL = API_HOST + 'networkgraph/parent/from/tmc/{}/depth/5'
         
     MAX_BOTTLENECK_DEPTH = 10
     
