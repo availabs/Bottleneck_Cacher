@@ -229,11 +229,11 @@ class TmcThreader(threading.Thread):
                 self.logger.start("Updating")
                 self.updateBottlenecks()
                 self.logger.end("Updating")
-                '''
+                
                 self.logger.start("Inserting")
                 self.insertBottlenecks()
                 self.logger.end("Inserting")
-                '''
+                
             # end for
         # end for
     
