@@ -5,6 +5,7 @@ import psycopg2, time, urllib2, json, datetime, calendar, threading, sys
 from connection_data import hermesConnectionData
         
 API_HOST = "http://localhost:12222/"
+API_HOST = "dev.npmrds.availabs.org/api/"
 
 class Nestor:
     def __init__(self):
@@ -549,13 +550,10 @@ class TmcThreader(threading.Thread):
             self.connection.commit()
 
 def main():    
-    logger = TimeLogger()
-    logger.start("Running time")
+    logger = TimeLogger().start("Running time")
     
     with getConnection(hermesConnectionData) as connection:
         
-        print "Num TMCs:",len(queryTmcs(connection))
-        '''
         threaders = [TmcThreader(d, connection) for d in range(4)]
         
         TmcThreader.initThreader(queryTmcs(connection))
@@ -564,7 +562,7 @@ def main():
             threader.start()
         for threader in threaders:
             threader.join()
-        '''
+        
     logger.log("==========")
     logger.end("Running time")
     logger.log("Total number of bottlenecks: {}".format(TmcThreader.totalBottlenecks))
