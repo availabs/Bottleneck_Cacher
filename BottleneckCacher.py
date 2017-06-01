@@ -545,7 +545,7 @@ class TmcThreader(threading.Thread):
             sql = """
                 INSERT INTO ny.bottlenecks
                 VALUES {}
-            """.format(",".join(map(lambda x: self.cursor.mogrify(d, x), self.bottlenecks)))
+            """.format(",".join(map(lambda x: cursor.mogrify(d, x), self.bottlenecks)))
             cursor.execute(sql)
             self.connection.commit()
 
@@ -592,7 +592,6 @@ def queryTmcs(connection):
             FROM attribute_data
             WHERE tmc NOT IN (SELECT DISTINCT tmc FROM ny.bottlenecks)
             AND state = 'ny'
-            LIMIT 178
         """
         cursor.execute(sql)
         result = tuple([row[0] for row in cursor])
