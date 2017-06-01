@@ -592,6 +592,7 @@ def queryTmcs(connection):
             FROM attribute_data
             WHERE tmc NOT IN (SELECT DISTINCT tmc FROM ny.bottlenecks)
             AND state = 'ny'
+            LIMIT 178
         """
         cursor.execute(sql)
         result = tuple([row[0] for row in cursor])
