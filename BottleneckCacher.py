@@ -3,7 +3,7 @@
 import psycopg2, time, urllib, urllib2, json, datetime, calendar, threading, sys
 import argparse
 from connection_data import hermesConnectionData
-
+from auth_login import login
 parser = argparse.ArgumentParser(description='generates bottleneck metric from the data')
 parser.add_argument('state', type=str, help='Enter the state that the calculation should be run with')
 parser.add_argument('--clear', dest='clear', help='Set flag to clear the database')
@@ -16,7 +16,7 @@ API_HOST = "http://staging.npmrds.availabs.org/api/"
 auth_header = {"Authorization":"Bearer "}
 
 print ('Aquiring Auth Token')
-params = urllib.urlencode({'email':'availabs@gmail.com', 'password':'password'})
+params = urllib.urlencode({'email':login['email'], 'password':login['password']})
 request = urllib2.Request('https://aauth.availabs.org/login/auth', params)
 token = ''
 try :
