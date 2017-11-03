@@ -312,7 +312,7 @@ class TmcThreader(threading.Thread):
             
             
             print (sql)
-       
+            tmcTuple = tmcTuple or self.tmcTuple
             cursor.execute(sql, (tmcTuple, ))
             Nestor() \
                 .key(lambda x: x[0]) \
