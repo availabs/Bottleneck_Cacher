@@ -30,7 +30,7 @@ except urllib2.URLError as e :
 
 auth_header['Authorization'] += token
 
-
+MAX_THREADS = 4
 class Nestor:
     def __init__(self):
         self.keyFuncs = []
@@ -584,7 +584,7 @@ def main():
             
         init_table(connection)
         
-        threaders = [TmcThreader(d, connection) for d in range(4)]
+        threaders = [TmcThreader(d, connection) for d in range(MAX_THREADS)]
         
         TmcThreader.initThreader(queryTmcs(connection))
         
