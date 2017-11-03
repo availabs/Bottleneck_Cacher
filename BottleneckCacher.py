@@ -102,7 +102,7 @@ def checkSpeed(speed, isInterstate):
             
 MULT = 1.0 / (60.0 * 60.0)
 def travelTimeToSpeed(tt, length):
-    return length / (float(tt) * MULT)
+    return length / (float(tt) * MULT + MULT)
     
 def epochToTime(epoch):
     minutes = epoch * 5
