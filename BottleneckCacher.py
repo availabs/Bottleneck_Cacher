@@ -30,7 +30,7 @@ except urllib2.URLError as e :
 
 auth_header['Authorization'] += token
 
-MAX_THREADS = 4
+MAX_THREADS = 1
 class Nestor:
     def __init__(self):
         self.keyFuncs = []
@@ -186,7 +186,7 @@ class TmcThreader(threading.Thread):
         
     def run(self):
         self.logger.log("Starting thread")
-        TMC_LIMIT = 500
+        TMC_LIMIT = 50
         while True:
 
             with TmcThreader.listLock:
@@ -266,7 +266,8 @@ class TmcThreader(threading.Thread):
                 FROM tmc_children
                 WHERE base IN %s
             """
-            cursor.execute(sql, (self.countyTmcs, )) 
+            cursor.execute(sql, (self.countyTmcs, ))
+            #print (cursor.query)
             self.tmcPairs = [x for x in cursor]
             self.connection.commit()
     
@@ -290,6 +291,7 @@ class TmcThreader(threading.Thread):
             """
             tmcTuple = tmcTuple or self.tmcTuple
             cursor.execute(sql, (tmcTuple, ))
+
             for row in cursor:
                 TmcThreader.tmcStats[row[0]] = (checkSpeed(row[1], row[3]), row[2], row[3])
             self.connection.commit()
@@ -299,15 +301,18 @@ class TmcThreader(threading.Thread):
             sql = """
                 SELECT npmrds.tmc, epoch, 
                     AVG(travel_time_all_vehicles)
-                FROM npmrds 
+                FROM {}.npmrds as npmrds 
                 WHERE npmrds.tmc IN %s
                 AND {}
                 AND epoch >= {}
                 AND epoch < {}
                 AND extract(DOW FROM date) IN (1, 2, 3, 4, 5)
                 GROUP BY npmrds.tmc, epoch
-            """.format(self.getDateQuery(), startEpoch, endEpoch)
-            tmcTuple = tmcTuple or self.tmcTuple
+            """.format(args.state, self.getDateQuery(), startEpoch, endEpoch)
+            
+            
+            print (sql)
+       
             cursor.execute(sql, (tmcTuple, ))
             Nestor() \
                 .key(lambda x: x[0]) \
@@ -317,8 +322,12 @@ class TmcThreader(threading.Thread):
 
     def getDateQuery(self):
         if self.month is 0:
-            return "npmrds_year(date) = {}".format(self.year)
-        return "npmrds_month(date) = {}".format(self.year * 100 + self.month)
+            return "date >= '{}-01-01' and date < '{}-12-31'".format(self.year, self.year)
+        
+        fin_year = (self.year + 1) if self.month == 12 else self.year
+        fin_month = self.month + 1 if self.month < 12 else 1
+        
+        return "date >= '{}-{}-01' and date < '{}-{}-01'".format(self.year , self.month, fin_year, self.month+1)
     
     def checkForBottlenecks(self):
         self.bottlenecks = []
@@ -624,6 +633,7 @@ def queryTmcs(connection):
             AND state = '{}'
         """
         cursor.execute(sql.format(args.state, args.state))
+        #print(cursor.query)
         result = tuple([row[0] for row in cursor])
     connection.commit()
     return result
@@ -655,8 +665,7 @@ def init_table(connection):
     connection.commit()
     
 
-if __name__ == "__main__":
-    
+if __name__ == "__main__":    
     main()
-    #print('Main is commenteted out until its really ready to run')
+
     print('Finished')
