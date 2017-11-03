@@ -1,11 +1,35 @@
 # -*- coding: utf-8 -*-
 
-import psycopg2, time, urllib2, json, datetime, calendar, threading, sys
-
+import psycopg2, time, urllib, urllib2, json, datetime, calendar, threading, sys
+import argparse
 from connection_data import hermesConnectionData
-        
+
+parser = argparse.ArgumentParser(description='generates bottleneck metric from the data')
+parser.add_argument('state', type=str, help='Enter the state that the calculation should be run with')
+parser.add_argument('--clear', dest='clear', help='Set flag to clear the database')
+args = parser.parse_args()
+print (args.state)
+print (args.clear)
+
 #API_HOST = "http://localhost:12222/"
-API_HOST = "http://dev.npmrds.availabs.org/api/"
+API_HOST = "http://staging.npmrds.availabs.org/api/"
+auth_header = {"Authorization":"Bearer "}
+
+print ('Aquiring Auth Token')
+params = urllib.urlencode({'email':'availabs@gmail.com', 'password':'password'})
+request = urllib2.Request('https://aauth.availabs.org/login/auth', params)
+token = ''
+try :
+    resp = urllib2.urlopen(request)
+    j = json.loads(resp.read())
+    token = str(j['token'])
+    print (token)
+except urllib2.URLError as e :
+    print ('Error Fetching Url', request)
+    raise e
+
+auth_header['Authorization'] += token
+
 
 class Nestor:
     def __init__(self):
@@ -119,16 +143,14 @@ class TmcThreader(threading.Thread):
     tmcGraph = {}
     TMC_BLACKLIST = set()
         
-    HOURLY_DELAY_URL = API_HOST + "measures/custom-query/nprm7/ny/tmcs/{}" +\
-        "?key=SubterraneanHomesickAvailian" +\
+    HOURLY_DELAY_URL = API_HOST + "hppm/custom-query/phed/ny/tmcs/{}" +\
         "&resHierarchyStr=EPOCH" +\
         "&startDate={}" +\
         "&endDate={}" +\
         "&startTime={}" +\
         "&endTime={}"
     TRAFFIC_VOLUME_URL = API_HOST + 'data/custom-query/traffic-count-distributions/ny/tmcs/{}' +\
-        "?key=SubterraneanHomesickAvailian" +\
-        "&resHierarchyStr=EPOCH" +\
+        "?resHierarchyStr=EPOCH" +\
         "&startDate={}" +\
         "&endDate={}" +\
         "&startTime={}" +\
@@ -197,7 +219,7 @@ class TmcThreader(threading.Thread):
         self.hoursOfDelay = {}
         self.trafficVolumes = {}
         
-        years = [2016, 2015]
+        years = [2017, 2016, 2015]
         months = range(0, 13)
             
         for year in years:
@@ -241,7 +263,7 @@ class TmcThreader(threading.Thread):
         with self.connection.cursor() as cursor:
             sql = """
                 SELECT base, child
-                FROM tmc_children_2
+                FROM tmc_children
                 WHERE base IN %s
             """
             cursor.execute(sql, (self.countyTmcs, )) 
@@ -263,7 +285,7 @@ class TmcThreader(threading.Thread):
         with self.connection.cursor() as cursor:
             sql = """
                 SELECT tmc, avg_speedlimit, length, is_interstate
-                FROM attribute_data
+                FROM tmc_attributes
                 WHERE tmc IN %s
             """
             tmcTuple = tmcTuple or self.tmcTuple
@@ -426,7 +448,7 @@ class TmcThreader(threading.Thread):
                         yearAndMonthToDate(self.year, self.month, True),
                         epochToTime(minEpoch),
                         epochToTime(maxEpoch))
-        request = urllib2.Request(url)
+        request = urllib2.Request(url, headers=auth_header)
         try:
             response = urllib2.urlopen(request)
             crapData = json.loads(response.read())
@@ -451,7 +473,7 @@ class TmcThreader(threading.Thread):
                         yearAndMonthToDate(self.year, self.month, True),
                         epochToTime(minEpoch),
                         epochToTime(maxEpoch))
-        request = urllib2.Request(url)
+        request = urllib2.Request(url, headers=auth_header)
         try:
             response = urllib2.urlopen(request)
             crapData = json.loads(response.read())
@@ -523,7 +545,7 @@ class TmcThreader(threading.Thread):
         
     def extendTmcGraph(self, tmc):
         url = TmcThreader.GRAPH_URL.format(tmc)
-        request = urllib2.Request(url)
+        request = urllib2.Request(url, headers=auth_header)
         newTmcs = set()
         try:
             response = urllib2.urlopen(request)
@@ -543,9 +565,9 @@ class TmcThreader(threading.Thread):
         with self.connection.cursor() as cursor:
             d = "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             sql = """
-                INSERT INTO ny.bottlenecks
+                INSERT INTO {}.bottlenecks
                 VALUES {}
-            """.format(",".join(map(lambda x: cursor.mogrify(d, x), self.bottlenecks)))
+            """.format(args.state, ",".join(map(lambda x: cursor.mogrify(d, x), self.bottlenecks)))
             cursor.execute(sql)
             self.connection.commit()
 
@@ -553,6 +575,14 @@ def main():
     logger = TimeLogger().start("Running time")
     
     with getConnection(hermesConnectionData) as connection:
+        if args.clear and args.state:
+            del_table(connection)
+            return
+        elif args.clear:
+            print ("need table space to delete from")
+            return 
+            
+        init_table(connection)
         
         threaders = [TmcThreader(d, connection) for d in range(4)]
         
@@ -589,15 +619,44 @@ def queryTmcs(connection):
     with connection.cursor() as cursor:
         sql = """
             SELECT DISTINCT tmc
-            FROM attribute_data
-            WHERE tmc NOT IN (SELECT DISTINCT tmc FROM ny.bottlenecks)
-            AND state = 'ny'
+            FROM tmc_attributes
+            WHERE tmc NOT IN (SELECT DISTINCT tmc FROM {}.bottlenecks)
+            AND state = '{}'
         """
-        cursor.execute(sql)
+        cursor.execute(sql.format(args.state, args.state))
         result = tuple([row[0] for row in cursor])
     connection.commit()
     return result
+def del_table(connection):
+    with connection.cursor() as cursor:
+        sql = """
+        DROP TABLE IF EXISTS {}.bottlenecks;
+        """
+        cursor.execute(sql.format(args.state))
+    connection.commit()
+    return
+def init_table(connection):
+    with connection.cursor() as cursor:
+        sql = """
+        CREATE TABLE IF NOT EXISTS {}.bottlenecks (
+          tmc character varying(9) NOT NULL,
+          start_epoch smallint NOT NULL,
+          end_epoch smallint NOT NULL,
+          year smallint NOT NULL,
+          month smallint NOT NULL,
+          peak_severity real NOT NULL,
+          peak_epoch smallint NOT NULL,
+          peak_depth smallint NOT NULL,
+          hours_of_delay_dist real[] NOT NULL,
+          traffic_volume_dist real[] NOT NULL
+        );
+        """
+        cursor.execute(sql.format(args.state))
+    connection.commit()
+    
 
 if __name__ == "__main__":
+    
     main()
-            
+    #print('Main is commenteted out until its really ready to run')
+    print('Finished')
