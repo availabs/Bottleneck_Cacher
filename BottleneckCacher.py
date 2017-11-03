@@ -456,9 +456,9 @@ class TmcThreader(threading.Thread):
                 for tmc in crapData[state]:
                     if tmc not in self.hoursOfDelay:
                         self.hoursOfDelay[tmc] = {}
-                    d = crapData[state][tmc]["nprm7"]["by_epoch"]
+                    d = crapData[state]["phed_data_by_tmc"][tmc]["by_epoch"]
                     for epoch in d:
-                        self.hoursOfDelay[tmc][epoch] = d[epoch]["total_excessive_delay"]
+                        self.hoursOfDelay[tmc][epoch] = d[epoch]["phed"]
         except urllib2.URLError as e:
             self.logger.log("<queryHourlyDelay>: {}".format(e.reason))
         
