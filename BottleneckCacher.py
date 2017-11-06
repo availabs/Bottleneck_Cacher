@@ -7,29 +7,59 @@ from auth_login import login
 parser = argparse.ArgumentParser(description='generates bottleneck metric from the data')
 parser.add_argument('state', type=str, help='Enter the state that the calculation should be run with')
 parser.add_argument('--clear', dest='clear', help='Set flag to clear the database')
+parser.add_argument('--dates', type=str, dest='dates', help='''Simple json map 
+to set year and month limits e.g. {2016:12}
+means the year of 2016 with all 12 months
+''')
+
 args = parser.parse_args()
 print (args.state)
 print (args.clear)
+print (args.dates)
+years = [2017, 2016]
+year_max = {2017:8, 2016:12}
+def parse_dates(dates) :
+    if not dates:
+        return
+    jdata = json.loads(dates)
+    global years
+    global year_max
 
+    years = map(int,jdata.keys())
+    for year in years:
+        year_max[year] = jdata[str(year)]
+
+parse_dates(args.dates)
 #API_HOST = "http://localhost:12222/"
 API_HOST = "http://staging.npmrds.availabs.org/api/"
-auth_header = {"Authorization":"Bearer "}
+auth_header = {}
+last_refresh = 0
+TOKEN_REFRESH_THRESH = 250
+def check_auth():
+    if 'Authorization' in auth_header and ((time.time() - last_refresh) < TOKEN_REFRESH_THRESH):
+        return
+    else:
+        print(time.time() - last_refresh)
+        set_header()
+def set_header():
+    print ('Aquiring Auth Token')
+    params = urllib.urlencode({'email':login['email'], 'password':login['password']})
+    request = urllib2.Request('https://aauth.availabs.org/login/auth', params)
+    token = ''
+    try :
+        resp = urllib2.urlopen(request)
+        j = json.loads(resp.read())
+        token = str(j['token'])
+        print (token)
+    except urllib2.URLError as e :
+        print ('Error Fetching Url', request)
+        raise e
 
-print ('Aquiring Auth Token')
-params = urllib.urlencode({'email':login['email'], 'password':login['password']})
-request = urllib2.Request('https://aauth.availabs.org/login/auth', params)
-token = ''
-try :
-    resp = urllib2.urlopen(request)
-    j = json.loads(resp.read())
-    token = str(j['token'])
-    print (token)
-except urllib2.URLError as e :
-    print ('Error Fetching Url', request)
-    raise e
-
-auth_header['Authorization'] += token
-
+    auth_header['Authorization'] = "Bearer "+ token
+    global last_refresh
+    last_refresh = time.time()
+    
+    
 MAX_THREADS = 1
 class Nestor:
     def __init__(self):
@@ -144,7 +174,7 @@ class TmcThreader(threading.Thread):
     TMC_BLACKLIST = set()
         
     HOURLY_DELAY_URL = API_HOST + "hppm/custom-query/phed/ny/tmcs/{}" +\
-        "&resHierarchyStr=EPOCH" +\
+        "?resHierarchyStr=EPOCH" +\
         "&startDate={}" +\
         "&endDate={}" +\
         "&startTime={}" +\
@@ -186,7 +216,7 @@ class TmcThreader(threading.Thread):
         
     def run(self):
         self.logger.log("Starting thread")
-        TMC_LIMIT = 50
+        TMC_LIMIT = 10
         while True:
 
             with TmcThreader.listLock:
@@ -219,11 +249,12 @@ class TmcThreader(threading.Thread):
         self.hoursOfDelay = {}
         self.trafficVolumes = {}
         
-        years = [2017, 2016, 2015]
         months = range(0, 13)
             
         for year in years:
             for month in months:
+                if month > year_max[year]:
+                    continue
                 self.logger.log("checking year: {}, month: {}".format(year, month))
                 self.setDate(year, month)
                 
@@ -325,9 +356,9 @@ class TmcThreader(threading.Thread):
             return "date >= '{}-01-01' and date < '{}-12-31'".format(self.year, self.year)
         
         fin_year = (self.year + 1) if self.month == 12 else self.year
-        fin_month = self.month + 1 if self.month < 12 else 1
+        fin_month = (self.month + 1) if self.month < 12 else "01"
         
-        return "date >= '{}-{}-01' and date < '{}-{}-01'".format(self.year , self.month, fin_year, self.month+1)
+        return "date >= '{}-{}-01' and date < '{}-{}-01'".format(self.year , self.month, fin_year, fin_month)
     
     def checkForBottlenecks(self):
         self.bottlenecks = []
@@ -457,12 +488,15 @@ class TmcThreader(threading.Thread):
                         yearAndMonthToDate(self.year, self.month, True),
                         epochToTime(minEpoch),
                         epochToTime(maxEpoch))
+        check_auth()
         request = urllib2.Request(url, headers=auth_header)
         try:
             response = urllib2.urlopen(request)
             crapData = json.loads(response.read())
             for state in crapData:
-                for tmc in crapData[state]:
+                if crapData[state] == None:
+                     continue
+                for tmc in crapData[state]["phed_data_by_tmc"]:
                     if tmc not in self.hoursOfDelay:
                         self.hoursOfDelay[tmc] = {}
                     d = crapData[state]["phed_data_by_tmc"][tmc]["by_epoch"]
@@ -470,6 +504,7 @@ class TmcThreader(threading.Thread):
                         self.hoursOfDelay[tmc][epoch] = d[epoch]["phed"]
         except urllib2.URLError as e:
             self.logger.log("<queryHourlyDelay>: {}".format(e.reason))
+            self.logger.log("{}".format(url))
         
     def queryTrafficVolume(self, startEpoch = 72, endEpoch = 240):
         tmcs = set(map(lambda x: x[0], self.bottlenecks))
@@ -482,6 +517,7 @@ class TmcThreader(threading.Thread):
                         yearAndMonthToDate(self.year, self.month, True),
                         epochToTime(minEpoch),
                         epochToTime(maxEpoch))
+        check_auth()
         request = urllib2.Request(url, headers=auth_header)
         try:
             response = urllib2.urlopen(request)
@@ -554,6 +590,7 @@ class TmcThreader(threading.Thread):
         
     def extendTmcGraph(self, tmc):
         url = TmcThreader.GRAPH_URL.format(tmc)
+        check_auth()
         request = urllib2.Request(url, headers=auth_header)
         newTmcs = set()
         try:
@@ -637,6 +674,7 @@ def queryTmcs(connection):
         result = tuple([row[0] for row in cursor])
     connection.commit()
     return result
+
 def del_table(connection):
     with connection.cursor() as cursor:
         sql = """
