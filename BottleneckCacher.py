@@ -551,6 +551,7 @@ class TmcThreader(threading.Thread):
                     bn[8].append(self.hoursOfDelay[tmc][epoch])
                 if updateTrafficVolume and epoch in self.trafficVolumes[tmc]:
                     bn[9].append(self.trafficVolumes[tmc][epoch])
+            bn.append(args.aadt_type.lower())
         
     def calcBottleneckDepths(self):
         for bottleneck in self.bottlenecks:
@@ -615,7 +616,7 @@ class TmcThreader(threading.Thread):
     
     def insertBottlenecks(self):
         with self.connection.cursor() as cursor:
-            d = "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            d = "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
             sql = """
                 INSERT INTO {}.bottlenecks
                 VALUES {}
@@ -702,7 +703,8 @@ def init_table(connection):
           peak_epoch smallint NOT NULL,
           peak_depth smallint NOT NULL,
           hours_of_delay_dist real[] NOT NULL,
-          traffic_volume_dist real[] NOT NULL
+          traffic_volume_dist real[] NOT NULL,
+          aadttype varchar NOT NULL
         );
         """
         cursor.execute(sql.format(args.state))
