@@ -4,6 +4,7 @@ import psycopg2, time, urllib, urllib2, json, datetime, calendar, threading, sys
 import argparse
 from connection_data import hermesConnectionData
 from auth_login import login
+types = {'all':'all_vehicles', 'pass':'passenger_vehicles', 'trucks':'freight_trucks'}
 parser = argparse.ArgumentParser(description='generates bottleneck metric from the data')
 parser.add_argument('state', type=str, help='Enter the state that the calculation should be run with')
 parser.add_argument('--clear', dest='clear', help='Set flag to clear the database')
@@ -11,11 +12,14 @@ parser.add_argument('--dates', type=str, dest='dates', help='''Simple json map
 to set year and month limits e.g. {2016:12}
 means the year of 2016 with all 12 months
 ''')
+parser.add_argument ('--type', type=str, dest='aadt_type', default='all', help='Optional aadt type parameter')
+
 
 args = parser.parse_args()
 print (args.state)
 print (args.clear)
 print (args.dates)
+print (args.aadt_type)
 years = [2017, 2016]
 year_max = {2017:8, 2016:12}
 def parse_dates(dates) :
@@ -30,8 +34,9 @@ def parse_dates(dates) :
         year_max[year] = jdata[str(year)]
 
 parse_dates(args.dates)
+aadt_type = types[args.aadt_type.lower()]
 #API_HOST = "http://localhost:12222/"
-API_HOST = "http://staging.npmrds.availabs.org/api/"
+API_HOST = "https://staging.npmrds.availabs.org/api/"
 auth_header = {}
 last_refresh = 0
 TOKEN_REFRESH_THRESH = 250
@@ -49,6 +54,7 @@ def set_header():
     try :
         resp = urllib2.urlopen(request)
         j = json.loads(resp.read())
+        print (j)
         token = str(j['token'])
         print (token)
     except urllib2.URLError as e :
@@ -331,7 +337,7 @@ class TmcThreader(threading.Thread):
         with self.connection.cursor() as cursor:
             sql = """
                 SELECT npmrds.tmc, epoch, 
-                    AVG(travel_time_all_vehicles)
+                    AVG(travel_time_{})
                 FROM {}.npmrds as npmrds 
                 WHERE npmrds.tmc IN %s
                 AND {}
@@ -339,7 +345,7 @@ class TmcThreader(threading.Thread):
                 AND epoch < {}
                 AND extract(DOW FROM date) IN (1, 2, 3, 4, 5)
                 GROUP BY npmrds.tmc, epoch
-            """.format(args.state, self.getDateQuery(), startEpoch, endEpoch)
+            """.format(aadt_type, args.state, self.getDateQuery(), startEpoch, endEpoch)
             
             
             print (sql)
