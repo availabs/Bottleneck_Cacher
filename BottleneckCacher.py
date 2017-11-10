@@ -342,7 +342,7 @@ class TmcThreader(threading.Thread):
             """.format(args.state, self.getDateQuery(), startEpoch, endEpoch)
             
             
-            print (sql)
+            #print (sql)
             tmcTuple = tmcTuple or self.tmcTuple
             cursor.execute(sql, (tmcTuple, ))
             Nestor() \
