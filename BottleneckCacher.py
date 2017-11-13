@@ -36,6 +36,7 @@ def parse_dates(dates) :
 parse_dates(args.dates)
 aadt_type = types[args.aadt_type.lower()]
 #API_HOST = "http://localhost:12222/"
+AADT_HOST = "http://ares.availabs.org:12222/"
 API_HOST = "https://staging.npmrds.availabs.org/api/"
 auth_header = {}
 last_refresh = 0
@@ -64,23 +65,23 @@ def set_header():
     auth_header['Authorization'] = "Bearer "+ token
     global last_refresh
     last_refresh = time.time()
-    
-    
+
+
 MAX_THREADS = 1
 class Nestor:
     def __init__(self):
         self.keyFuncs = []
-        
+
     def key(self, k):
         self.keyFuncs.append(k)
         return self
-        
+
     def makeDict(self, data, _dict = {}):
         return self._makeDict(_dict, 0, data)
-        
+
     def makeList(self, data):
         return self._makeList(0, data)
-            
+
     def _makeDict(self, group, level, data):
         if level >= len(self.keyFuncs):
             return data.pop()
@@ -90,7 +91,7 @@ class Nestor:
                 group[k] = {}
             group[k] = self._makeDict(group[k], level + 1, [d])
         return group
-        
+
     def _makeList(self, level, data):
         if level >= len(self.keyFuncs):
             return data.pop()
@@ -158,12 +159,14 @@ def yearAndMonthToDate(year, month, endDate=False):
     return str(date)
 
 def getAverageTravelTime(travelTimeData, epoch):
+
     tt = travelTimeData[epoch][2]
+
     count = 1
-    if (epoch + 1) in travelTimeData:
+    if (epoch + 1) in travelTimeData and travelTimeData[epoch+1][2]:
         tt += travelTimeData[epoch + 1][2]
         count += 1
-    if (epoch + 2) in travelTimeData:
+    if (epoch + 2) in travelTimeData and travelTimeData[epoch+2][2]:
         tt += travelTimeData[epoch + 2][2]
         count += 1
     return tt / count
@@ -185,7 +188,8 @@ class TmcThreader(threading.Thread):
         "&endDate={}" +\
         "&startTime={}" +\
         "&endTime={}"
-    TRAFFIC_VOLUME_URL = API_HOST + 'data/custom-query/traffic-count-distributions/ny/tmcs/{}' +\
+    #USE SPECIAL AADT HOST FOR CUSTOM AADT TYPE
+    TRAFFIC_VOLUME_URL = AADT_HOST + 'data/custom-query/traffic-count-distributions/ny/tmcs/{}' +\
         "?resHierarchyStr=EPOCH" +\
         "&startDate={}" +\
         "&endDate={}" +\
@@ -332,22 +336,22 @@ class TmcThreader(threading.Thread):
             for row in cursor:
                 TmcThreader.tmcStats[row[0]] = (checkSpeed(row[1], row[3]), row[2], row[3])
             self.connection.commit()
-        
+
     def queryTravelTimes(self, tmcTuple = None, startEpoch = 72, endEpoch = 240):
         with self.connection.cursor() as cursor:
+            second = '' if aadt_type=='all_vehicles' else ',AVG(travel_time_all_vehicles)'
             sql = """
-                SELECT npmrds.tmc, epoch, 
-                    AVG(travel_time_{})
-                FROM {}.npmrds as npmrds 
+                SELECT npmrds.tmc, epoch,
+                    COALESCE(AVG(travel_time_{}) {} )
+                FROM {}.npmrds as npmrds
                 WHERE npmrds.tmc IN %s
                 AND {}
                 AND epoch >= {}
                 AND epoch < {}
                 AND extract(DOW FROM date) IN (1, 2, 3, 4, 5)
                 GROUP BY npmrds.tmc, epoch
-            """.format(aadt_type, args.state, self.getDateQuery(), startEpoch, endEpoch)
-            
-            
+            """.format(aadt_type, second, args.state, self.getDateQuery(), startEpoch, endEpoch)
+
             #print (sql)
             tmcTuple = tmcTuple or self.tmcTuple
             cursor.execute(sql, (tmcTuple, ))
@@ -403,7 +407,6 @@ class TmcThreader(threading.Thread):
                     if key in keys:
                         epoch += 1
                         continue              
-                    
                     baseTt = getAverageTravelTime(baseTravelTimeData, epoch)
                     #baseTt = baseTravelTimeData[epoch][2]
                     baseLength = baseStats[1]
@@ -673,10 +676,10 @@ def queryTmcs(connection):
         sql = """
             SELECT DISTINCT tmc
             FROM tmc_attributes
-            WHERE tmc NOT IN (SELECT DISTINCT tmc FROM {}.bottlenecks)
+            WHERE tmc NOT IN (SELECT DISTINCT tmc FROM {}.bottlenecks WHERE aadttype = '{}')
             AND state = '{}'
         """
-        cursor.execute(sql.format(args.state, args.state))
+        cursor.execute(sql.format(args.state, args.aadt_type, args.state))
         #print(cursor.query)
         result = tuple([row[0] for row in cursor])
     connection.commit()
