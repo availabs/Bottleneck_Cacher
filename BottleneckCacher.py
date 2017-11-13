@@ -4,7 +4,13 @@ import psycopg2, time, urllib, urllib2, json, datetime, calendar, threading, sys
 import argparse
 from connection_data import hermesConnectionData
 from auth_login import login
-types = {'all':'all_vehicles', 'pass':'passenger_vehicles', 'trucks':'freight_trucks'}
+types = {
+    'all':'all_vehicles',
+    'pass':'passenger_vehicles',
+    'truck':'freight_trucks',
+    'combi':'freight_trucks',
+    'singl':'freight_trucks'
+}
 parser = argparse.ArgumentParser(description='generates bottleneck metric from the data')
 parser.add_argument('state', type=str, help='Enter the state that the calculation should be run with')
 parser.add_argument('--clear', dest='clear', help='Set flag to clear the database')
@@ -35,6 +41,8 @@ def parse_dates(dates) :
 
 parse_dates(args.dates)
 aadt_type = types[args.aadt_type.lower()]
+if not aadt_type:
+    raise TypeError
 #API_HOST = "http://localhost:12222/"
 AADT_HOST = "http://ares.availabs.org:12222/"
 API_HOST = "https://staging.npmrds.availabs.org/api/"
@@ -679,7 +687,7 @@ def queryTmcs(connection):
             WHERE tmc NOT IN (SELECT DISTINCT tmc FROM {}.bottlenecks WHERE aadttype = '{}')
             AND state = '{}'
         """
-        cursor.execute(sql.format(args.state, args.aadt_type, args.state))
+        cursor.execute(sql.format(args.state, args.aadt_type.lower(), args.state))
         #print(cursor.query)
         result = tuple([row[0] for row in cursor])
     connection.commit()
